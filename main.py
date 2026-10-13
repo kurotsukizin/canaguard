@@ -1,10 +1,22 @@
+import json
 from datetime import datetime
+from pathlib import Path
 
 
 STATUS_PERDA = (
     "BAIXO",
     "ATENCAO",
     "CRITICO",
+)
+
+DIRETORIO_RAIZ = Path(__file__).resolve().parent
+DIRETORIO_DADOS = DIRETORIO_RAIZ / "data"
+DIRETORIO_RELATORIOS = DIRETORIO_RAIZ / "reports"
+
+ARQUIVO_JSON = DIRETORIO_DADOS / "colheitas.json"
+ARQUIVO_RELATORIO = (
+    DIRETORIO_RELATORIOS
+    / "relatorio_colheitas.txt"
 )
 
 registros_colheita = []
@@ -28,7 +40,10 @@ def ler_texto_obrigatorio(mensagem):
         if valor:
             return valor
 
-        print("Entrada invalida. Informe um texto nao vazio.")
+        print(
+            "Entrada invalida. "
+            "Informe um texto nao vazio."
+        )
 
 
 def ler_numero_positivo(mensagem, permite_zero=False):
@@ -47,7 +62,10 @@ def ler_numero_positivo(mensagem, permite_zero=False):
             print("Informe um valor maior que zero.")
 
         except ValueError:
-            print("Entrada invalida. Digite somente um numero.")
+            print(
+                "Entrada invalida. "
+                "Digite somente um numero."
+            )
 
 
 def calcular_dados_colheita(
@@ -93,6 +111,18 @@ def classificar_perda(percentual_perda):
     return STATUS_PERDA[2]
 
 
+def obter_proximo_id():
+    if not registros_colheita:
+        return 1
+
+    maior_id = max(
+        registro["id"]
+        for registro in registros_colheita
+    )
+
+    return maior_id + 1
+
+
 def cadastrar_colheita():
     exibir_titulo("CADASTRO DE COLHEITA")
 
@@ -134,7 +164,7 @@ def cadastrar_colheita():
     )
 
     registro = {
-        "id": len(registros_colheita) + 1,
+        "id": obter_proximo_id(),
         "talhao": talhao.upper(),
         "area_hectares": area_hectares,
         "produtividade_estimada_t_ha": produtividade_estimada,
@@ -181,6 +211,10 @@ def exibir_resumo_registro(registro):
         f"R$ {registro['prejuizo_estimado']:.2f}"
     )
     print(f"Classificacao: {registro['status']}")
+    print(
+        "Data do registro: "
+        f"{registro['data_registro']}"
+    )
 
 
 def listar_colheitas():
@@ -221,11 +255,11 @@ def buscar_por_talhao():
         "Informe o talhao: "
     ).upper()
 
-    encontrados = []
-
-    for registro in registros_colheita:
-        if registro["talhao"] == talhao:
-            encontrados.append(registro)
+    encontrados = [
+        registro
+        for registro in registros_colheita
+        if registro["talhao"] == talhao
+    ]
 
     if not encontrados:
         print("Nenhum registro encontrado.")
@@ -239,11 +273,11 @@ def buscar_por_talhao():
 def listar_registros_criticos():
     exibir_titulo("REGISTROS CRITICOS")
 
-    criticos = []
-
-    for registro in registros_colheita:
-        if registro["status"] == STATUS_PERDA[2]:
-            criticos.append(registro)
+    criticos = [
+        registro
+        for registro in registros_colheita
+        if registro["status"] == STATUS_PERDA[2]
+    ]
 
     if not criticos:
         print("Nenhum registro critico identificado.")
@@ -254,6 +288,205 @@ def listar_registros_criticos():
         exibir_resumo_registro(registro)
 
 
+def salvar_json():
+    exibir_titulo("SALVAR DADOS EM JSON")
+
+    if not registros_colheita:
+        print("Nao existem registros para salvar.")
+        return
+
+    try:
+        DIRETORIO_DADOS.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        with ARQUIVO_JSON.open(
+            "w",
+            encoding="utf-8",
+        ) as arquivo:
+            json.dump(
+                registros_colheita,
+                arquivo,
+                ensure_ascii=False,
+                indent=4,
+            )
+
+        print(
+            "Dados salvos com sucesso em:"
+        )
+        print(ARQUIVO_JSON)
+
+    except OSError as erro:
+        print(
+            "Erro ao salvar o arquivo JSON:"
+        )
+        print(erro)
+
+
+def carregar_json():
+    global registros_colheita
+
+    exibir_titulo("CARREGAR DADOS DO JSON")
+
+    if not ARQUIVO_JSON.exists():
+        print(
+            "Arquivo JSON nao encontrado."
+        )
+        print(ARQUIVO_JSON)
+        return
+
+    try:
+        with ARQUIVO_JSON.open(
+            "r",
+            encoding="utf-8",
+        ) as arquivo:
+            dados = json.load(arquivo)
+
+        if not isinstance(dados, list):
+            print(
+                "Arquivo JSON invalido: "
+                "a estrutura esperada e uma lista."
+            )
+            return
+
+        registros_colheita = dados
+
+        print(
+            f"{len(registros_colheita)} "
+            "registro(s) carregado(s) com sucesso."
+        )
+
+    except json.JSONDecodeError:
+        print(
+            "Erro: o arquivo JSON possui "
+            "formato invalido."
+        )
+
+    except OSError as erro:
+        print(
+            "Erro ao ler o arquivo JSON:"
+        )
+        print(erro)
+
+
+def montar_conteudo_relatorio():
+    linhas = []
+
+    linhas.append("=" * 70)
+    linhas.append(
+        "CANAGUARD - RELATORIO DE PERDAS NA COLHEITA"
+    )
+    linhas.append("=" * 70)
+    linhas.append(
+        "Data de geracao: "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    )
+    linhas.append(
+        f"Total de registros: {len(registros_colheita)}"
+    )
+    linhas.append("")
+
+    if not registros_colheita:
+        linhas.append(
+            "Nenhum registro cadastrado."
+        )
+        return "\n".join(linhas)
+
+    total_perda = sum(
+        registro["perda_t"]
+        for registro in registros_colheita
+    )
+
+    total_prejuizo = sum(
+        registro["prejuizo_estimado"]
+        for registro in registros_colheita
+    )
+
+    total_criticos = sum(
+        1
+        for registro in registros_colheita
+        if registro["status"] == STATUS_PERDA[2]
+    )
+
+    linhas.append("RESUMO GERAL")
+    linhas.append("-" * 70)
+    linhas.append(
+        f"Perda total estimada: {total_perda:.2f} t"
+    )
+    linhas.append(
+        "Prejuizo total estimado: "
+        f"R$ {total_prejuizo:.2f}"
+    )
+    linhas.append(
+        f"Registros criticos: {total_criticos}"
+    )
+    linhas.append("")
+
+    linhas.append("DETALHAMENTO DOS REGISTROS")
+    linhas.append("-" * 70)
+
+    for registro in registros_colheita:
+        linhas.append(
+            f"ID {registro['id']} - "
+            f"Talhao: {registro['talhao']}"
+        )
+        linhas.append(
+            "Producao esperada: "
+            f"{registro['producao_esperada_t']:.2f} t"
+        )
+        linhas.append(
+            "Producao colhida: "
+            f"{registro['producao_colhida_t']:.2f} t"
+        )
+        linhas.append(
+            f"Perda: {registro['perda_t']:.2f} t"
+        )
+        linhas.append(
+            "Percentual de perda: "
+            f"{registro['percentual_perda']:.2f}%"
+        )
+        linhas.append(
+            "Prejuizo estimado: "
+            f"R$ {registro['prejuizo_estimado']:.2f}"
+        )
+        linhas.append(
+            f"Status: {registro['status']}"
+        )
+        linhas.append("-" * 70)
+
+    return "\n".join(linhas)
+
+
+def gerar_relatorio_txt():
+    exibir_titulo("GERAR RELATORIO TXT")
+
+    try:
+        DIRETORIO_RELATORIOS.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        conteudo = montar_conteudo_relatorio()
+
+        with ARQUIVO_RELATORIO.open(
+            "w",
+            encoding="utf-8",
+        ) as arquivo:
+            arquivo.write(conteudo)
+
+        print(
+            "Relatorio gerado com sucesso em:"
+        )
+        print(ARQUIVO_RELATORIO)
+
+    except OSError as erro:
+        print(
+            "Erro ao gerar o relatorio:"
+        )
+        print(erro)
+
+
 def exibir_menu():
     exibir_titulo("CANAGUARD - CONTROLE DE PERDAS")
 
@@ -261,19 +494,36 @@ def exibir_menu():
     print("2 - Listar colheitas")
     print("3 - Consultar por talhao")
     print("4 - Exibir registros criticos")
+    print("5 - Salvar dados em JSON")
+    print("6 - Carregar dados do JSON")
+    print("7 - Gerar relatorio em TXT")
     print("0 - Sair")
 
 
 def ler_opcao_menu():
-    opcoes_validas = ("0", "1", "2", "3", "4")
+    opcoes_validas = (
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+    )
 
     while True:
-        opcao = input("\nEscolha uma opcao: ").strip()
+        opcao = input(
+            "\nEscolha uma opcao: "
+        ).strip()
 
         if opcao in opcoes_validas:
             return opcao
 
-        print("Opcao invalida. Escolha uma opcao do menu.")
+        print(
+            "Opcao invalida. "
+            "Escolha uma opcao do menu."
+        )
 
 
 def main():
@@ -295,6 +545,18 @@ def main():
 
         elif opcao == "4":
             listar_registros_criticos()
+            pausar()
+
+        elif opcao == "5":
+            salvar_json()
+            pausar()
+
+        elif opcao == "6":
+            carregar_json()
+            pausar()
+
+        elif opcao == "7":
+            gerar_relatorio_txt()
             pausar()
 
         else:
