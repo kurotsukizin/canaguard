@@ -2,6 +2,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from database import (
+    consultar_registros_oracle,
+    salvar_registro_oracle,
+)
+
 
 STATUS_PERDA = (
     "BAIXO",
@@ -312,15 +317,11 @@ def salvar_json():
                 indent=4,
             )
 
-        print(
-            "Dados salvos com sucesso em:"
-        )
+        print("Dados salvos com sucesso em:")
         print(ARQUIVO_JSON)
 
     except OSError as erro:
-        print(
-            "Erro ao salvar o arquivo JSON:"
-        )
+        print("Erro ao salvar o arquivo JSON:")
         print(erro)
 
 
@@ -330,9 +331,7 @@ def carregar_json():
     exibir_titulo("CARREGAR DADOS DO JSON")
 
     if not ARQUIVO_JSON.exists():
-        print(
-            "Arquivo JSON nao encontrado."
-        )
+        print("Arquivo JSON nao encontrado.")
         print(ARQUIVO_JSON)
         return
 
@@ -364,9 +363,7 @@ def carregar_json():
         )
 
     except OSError as erro:
-        print(
-            "Erro ao ler o arquivo JSON:"
-        )
+        print("Erro ao ler o arquivo JSON:")
         print(erro)
 
 
@@ -388,9 +385,7 @@ def montar_conteudo_relatorio():
     linhas.append("")
 
     if not registros_colheita:
-        linhas.append(
-            "Nenhum registro cadastrado."
-        )
+        linhas.append("Nenhum registro cadastrado.")
         return "\n".join(linhas)
 
     total_perda = sum(
@@ -475,16 +470,75 @@ def gerar_relatorio_txt():
         ) as arquivo:
             arquivo.write(conteudo)
 
-        print(
-            "Relatorio gerado com sucesso em:"
-        )
+        print("Relatorio gerado com sucesso em:")
         print(ARQUIVO_RELATORIO)
 
     except OSError as erro:
-        print(
-            "Erro ao gerar o relatorio:"
-        )
+        print("Erro ao gerar o relatorio:")
         print(erro)
+
+
+def salvar_ultimo_registro_oracle():
+    exibir_titulo("GRAVAR ULTIMO REGISTRO NO ORACLE")
+
+    if not registros_colheita:
+        print("Nenhum registro cadastrado.")
+        return
+
+    ultimo_registro = registros_colheita[-1]
+
+    sucesso, mensagem = salvar_registro_oracle(
+        ultimo_registro
+    )
+
+    print(mensagem)
+
+
+def listar_registros_oracle():
+    exibir_titulo("CONSULTAR REGISTROS NO ORACLE")
+
+    sucesso, resultado = consultar_registros_oracle()
+
+    if not sucesso:
+        print(resultado)
+        return
+
+    if not resultado:
+        print("Nenhum registro encontrado no Oracle.")
+        return
+
+    print(
+        f"{'ID':<5}"
+        f"{'TALHAO':<15}"
+        f"{'PERDA (%)':<12}"
+        f"{'PREJUIZO (R$)':<18}"
+        f"{'STATUS':<12}"
+    )
+
+    print("-" * 62)
+
+    for registro in resultado:
+        (
+            identificador,
+            talhao,
+            _,
+            _,
+            _,
+            _,
+            _,
+            percentual_perda,
+            prejuizo_estimado,
+            status,
+            _,
+        ) = registro
+
+        print(
+            f"{identificador:<5}"
+            f"{talhao:<15}"
+            f"{float(percentual_perda):<12.2f}"
+            f"{float(prejuizo_estimado):<18.2f}"
+            f"{status:<12}"
+        )
 
 
 def exibir_menu():
@@ -497,6 +551,8 @@ def exibir_menu():
     print("5 - Salvar dados em JSON")
     print("6 - Carregar dados do JSON")
     print("7 - Gerar relatorio em TXT")
+    print("8 - Gravar ultimo registro no Oracle")
+    print("9 - Consultar registros do Oracle")
     print("0 - Sair")
 
 
@@ -510,6 +566,8 @@ def ler_opcao_menu():
         "5",
         "6",
         "7",
+        "8",
+        "9",
     )
 
     while True:
@@ -557,6 +615,14 @@ def main():
 
         elif opcao == "7":
             gerar_relatorio_txt()
+            pausar()
+
+        elif opcao == "8":
+            salvar_ultimo_registro_oracle()
+            pausar()
+
+        elif opcao == "9":
+            listar_registros_oracle()
             pausar()
 
         else:
